@@ -20,7 +20,7 @@ i2c:
   scl: GPIO7
   scan: false
   id: bus_a
-  frequency: 10kHz #
+  frequency: 10kHz #Volatile Organic Compounds sensor ags10 is the limited factor for i²c to max 15MHz, but I²C ESPHome docs says only 10MHz or 50MHz(default), ags10 docs on ESPHome says 15MHz. 
 
 api:
   encryption:
