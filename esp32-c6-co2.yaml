@@ -1,0 +1,108 @@
+esphome:
+  name: esp32-c6-co2
+  friendly_name: esp32-c6-co2
+  platformio_options:
+    build_flags: "-DI2C_NUM_1=I2C_NUM_0" #Needs to have this value, "bug" in esphome
+    board_build.f_cpu: 80000000L #Lowpower 80Mhz, less heat
+
+esp32:
+  board: esp32-c6-devkitm-1
+  variant: esp32c6
+  framework:
+    type: esp-idf
+    version: "5.3.1" #increase what ESPHome allow to, this is highest 2025/2
+    platform_version: "6.9.0" #increase what ESPHome allow to, this is highest 2025/2
+
+logger:
+
+i2c:
+  sda: GPIO6
+  scl: GPIO7
+  scan: false
+  id: bus_a
+  frequency: 10kHz #
+
+api:
+  encryption:
+    key: !secret c6-co2-api
+
+ota:
+  - platform: esphome
+    password: !secret c6-co2-ota
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  output_power: 9 #crashed at 8.5, low as possible, ESP32 do not handle to be close to AP and and have high dB. Couses heat also. Not tried high value, max is around 20.5 
+  power_save_mode: LIGHT #tried HIGH but it crashed.
+
+sensor:
+  - platform: bmp280_i2c
+    temperature:
+      name: "Barometer Temp."
+      oversampling: 4x #tried 2X, 8X and 16X. Becuse it show alot of wrong value. No difference, but to much can be a bad thing.
+      filters:
+      - offset: -8.8 #Calibrate
+    pressure:
+      name: "Barometer"
+      id: baro
+      oversampling: 4x #tried 2X, 8X and 16X. Becuse it show alot of wrong value. No difference, but to much can be a bad thing.
+    address: 0x77
+    iir_filter: 4x #tried 2X, 8X and 16X. Becuse it show alot of wrong value. No difference, but to much can be a bad thing.
+    update_interval: 60s
+
+  - platform: scd4x
+    co2:
+      name: "CO²"
+    temperature:
+      name: "CO² Temp."
+      accuracy_decimals: 1
+    ambient_pressure_compensation_source: baro
+    measurement_mode: low_power_periodic #"single_shot" works, so it's maybe a scd41 and not scd40. But it was to slow/wrong. "periodic" if you want fast value 5s. 
+    update_interval: 60s
+    temperature_offset: 6 #Calibrate, not the same as "offset:", works on both temp and humidity.
+    humidity:
+      name: "CO2 Humidity"
+      accuracy_decimals: 1
+    i2c_id: bus_a
+    address: 0x62
+
+  - platform: bh1750
+    name: "Lux"
+    accuracy_decimals: 0
+    address: 0x23
+    update_interval: 60s
+
+  - platform: aht10
+    variant: AHT20
+    temperature:
+      name: "Temp. Sensor"
+      accuracy_decimals: 1
+      filters:
+      - offset: -5 #Calibrate
+    humidity:
+      name: "Temp. Sensor Humidity"
+      accuracy_decimals: 1
+      filters:
+      - offset: 10 #Calibrate
+    update_interval: 60s
+
+  - platform: ags10
+    tvoc:
+      name: "Volatile Organic Compounds"
+
+binary_sensor:
+  - platform: gpio
+    name: Radar
+    device_class: motion
+    pin:
+      number: GPIO4
+
+button:
+  - platform: template
+    name: "CO² calibrate 3min. Vent, lowest value=activate, no draft."
+    entity_category: "config"
+    on_press:
+      then:
+      - scd4x.perform_forced_calibration:
+          value: 427 # outside average Feb 2025. Put Vent/open windows on max whole day and keep out people/pet as much you can, activate. Not to drafty on sensor. Activate when you see lowest value you can get. 
